@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2002, IBM Corp.
  *
- * All rights reserved.          
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
 /* Other architectures wishing to use this simple topology API should fill
    in the below functions as appropriate in their own <asm/topology.h> file. */
 #ifndef cpu_to_node
-#define cpu_to_node(cpu)	(0)
+#define cpu_to_node(cpu)	(0) // 只有一个node，返回0
 #endif
 #ifndef parent_node
 #define parent_node(node)	(0)

@@ -130,7 +130,7 @@ ENTRY(startup_32_smp)
 
 /*
  *	New page tables may be in 4Mbyte page mode and may
- *	be using the global pages. 
+ *	be using the global pages.
  *
  *	NOTE! If we are on a 486 we may have no cr4 at all!
  *	So we do not try to touch it unless we really have
@@ -316,7 +316,7 @@ is386:	movl $2,%ecx		# set MP
 	lldt %ax
 	cld			# gcc2 wants the direction flag cleared at all times
 #ifdef CONFIG_SMP
-	movb ready, %cl	
+	movb ready, %cl
 	cmpb $1,%cl
 	je 1f			# the first CPU calls start_kernel
 				# all other CPUs call initialize_secondary
@@ -412,6 +412,7 @@ ENTRY(_stext)
  * BSS section
  */
 .section ".bss.page_aligned","w"
+/* 内核态的页目录 */
 ENTRY(swapper_pg_dir)
 	.fill 1024,4,0
 ENTRY(empty_zero_page)

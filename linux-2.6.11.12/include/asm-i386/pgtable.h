@@ -90,7 +90,7 @@ void paging_init(void);
  * of the Pentium details, but assuming intel did the straightforward
  * thing, this bit set in the page directory entry just means that
  * the page directory entry points directly to a 4MB-aligned block of
- * memory. 
+ * memory.
  */
 #define _PAGE_BIT_PRESENT	0
 #define _PAGE_BIT_RW		1
@@ -302,6 +302,7 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
  * this macro returns the index of the entry in the pgd page which would
  * control the given virtual address
  */
+// 从虚拟地址中取出高10位作为页目录的索引
 #define pgd_index(address) (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
 #define pgd_index_k(addr) pgd_index(addr)
 
@@ -309,12 +310,14 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
  * pgd_offset() returns a (pgd_t *)
  * pgd_index() is used get the offset into the pgd page's array of pgd_t's;
  */
+// 返回虚拟地址对应的页目录项指针
 #define pgd_offset(mm, address) ((mm)->pgd+pgd_index(address))
 
 /*
  * a shortcut which implies the use of the kernel's pgd, instead
  * of a process's
  */
+// 返回虚拟地址对应的主内核页目录项指针
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /*
@@ -332,6 +335,7 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
  * this macro returns the index of the entry in the pte page which would
  * control the given virtual address
  */
+// 从虚拟地址中取出中间10位作为页表的索引
 #define pte_index(address) \
 		(((address) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
 #define pte_offset_kernel(dir, address) \

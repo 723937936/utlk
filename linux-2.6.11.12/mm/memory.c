@@ -62,7 +62,7 @@
 #ifndef CONFIG_DISCONTIGMEM
 /* use the per-pgdat data instead for discontigmem - mbligh */
 unsigned long max_mapnr;
-struct page *mem_map;
+struct page *mem_map; // 页描述符数组
 
 EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(mem_map);

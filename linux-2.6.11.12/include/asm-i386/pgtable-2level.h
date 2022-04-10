@@ -19,12 +19,16 @@
 
 #define ptep_get_and_clear(xp)	__pte(xchg(&(xp)->pte_low, 0))
 #define pte_same(a, b)		((a).pte_low == (b).pte_low)
+// 返回页表项对应的页描述符
 #define pte_page(x)		pfn_to_page(pte_pfn(x))
 #define pte_none(x)		(!(x).pte_low)
+// 从页表项中取出物理页帧号
 #define pte_pfn(x)		((unsigned long)(((x).pte_low >> PAGE_SHIFT)))
+// 从页帧号构造页表项
 #define pfn_pte(pfn, prot)	__pte(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
+// 从页帧号构造页目录项
 #define pfn_pmd(pfn, prot)	__pmd(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
-
+// 返回页目录项对应的页描述符
 #define pmd_page(pmd) (pfn_to_page(pmd_val(pmd) >> PAGE_SHIFT))
 
 #define pmd_page_kernel(pmd) \

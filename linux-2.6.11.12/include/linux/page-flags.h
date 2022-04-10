@@ -61,11 +61,12 @@
 #define PG_active		 6
 #define PG_slab			 7	/* slab debug (Suparna wants this) */
 
-#define PG_highmem		 8
+#define PG_highmem		 8 // 在ZONE_HIGHMEM内
 #define PG_checked		 9	/* kill me in 2.5.<early>. */
 #define PG_arch_1		10
-#define PG_reserved		11
+#define PG_reserved		11 // 是否是保留内存页帧，不可以动态分配的页帧
 
+// 如果设置，则page->private有意义
 #define PG_private		12	/* Has something at ->private */
 #define PG_writeback		13	/* Page is under writeback */
 #define PG_nosave		14	/* Used for system suspend/resume */

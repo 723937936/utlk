@@ -2,9 +2,9 @@
 #define _I386_PAGE_H
 
 /* PAGE_SHIFT determines the page size */
-#define PAGE_SHIFT	12
-#define PAGE_SIZE	(1UL << PAGE_SHIFT)
-#define PAGE_MASK	(~(PAGE_SIZE-1))
+#define PAGE_SHIFT	12 // 页内偏移位数
+#define PAGE_SIZE	(1UL << PAGE_SHIFT) // 页大小4KB
+#define PAGE_MASK	(~(PAGE_SIZE-1)) // 0xfffff000
 
 #define LARGE_PAGE_MASK (~(LARGE_PAGE_SIZE-1))
 #define LARGE_PAGE_SIZE (1UL << PMD_SHIFT)
@@ -27,7 +27,7 @@
  *	On older X86 processors it's not a win to use MMX here it seems.
  *	Maybe the K6-III ?
  */
- 
+
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
@@ -54,14 +54,14 @@ typedef struct { unsigned long long pgprot; } pgprot_t;
 #define __pmd(x) ((pmd_t) { (x) } )
 #define HPAGE_SHIFT	21
 #else
-typedef struct { unsigned long pte_low; } pte_t;
-typedef struct { unsigned long pgd; } pgd_t;
-typedef struct { unsigned long pgprot; } pgprot_t;
+typedef struct { unsigned long pte_low; } pte_t; // 页表项-4字节
+typedef struct { unsigned long pgd; } pgd_t; // 页目录项-4字节
+typedef struct { unsigned long pgprot; } pgprot_t; // 页表项属性
 #define boot_pte_t pte_t /* or would you rather have a typedef */
 #define pte_val(x)	((x).pte_low)
 #define HPAGE_SHIFT	22
 #endif
-#define PTE_MASK	PAGE_MASK
+#define PTE_MASK	PAGE_MASK // 0xfffff000
 
 #ifdef CONFIG_HUGETLB_PAGE
 #define HPAGE_SIZE	((1UL) << HPAGE_SHIFT)
@@ -89,7 +89,7 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  *
  * A __PAGE_OFFSET of 0xC0000000 means that the kernel has
  * a virtual address space of one gigabyte, which limits the
- * amount of physical memory you can use to about 950MB. 
+ * amount of physical memory you can use to about 950MB.
  *
  * If you want more physical memory than this then see the CONFIG_HIGHMEM4G
  * and CONFIG_HIGHMEM64G options in the kernel configuration.
@@ -122,24 +122,24 @@ extern int sysctl_legacy_va_layout;
 #endif /* __ASSEMBLY__ */
 
 #ifdef __ASSEMBLY__
-#define __PAGE_OFFSET		(0xC0000000)
+#define __PAGE_OFFSET		(0xC0000000) // 虚拟地址3GB位置
 #else
 #define __PAGE_OFFSET		(0xC0000000UL)
 #endif
 
 
-#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
+#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET) // 虚拟地址3GB位置
 #define VMALLOC_RESERVE		((unsigned long)__VMALLOC_RESERVE)
 #define MAXMEM			(-__PAGE_OFFSET-__VMALLOC_RESERVE)
-#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
-#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
-#define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
+#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET) // 虚拟地址转物理地址
+#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET)) // 物理地址转虚拟地址
+#define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT) // 页帧号转虚拟地址
 #ifndef CONFIG_DISCONTIGMEM
-#define pfn_to_page(pfn)	(mem_map + (pfn))
-#define page_to_pfn(page)	((unsigned long)((page) - mem_map))
+#define pfn_to_page(pfn)	(mem_map + (pfn)) // 页帧号转页描述符
+#define page_to_pfn(page)	((unsigned long)((page) - mem_map)) // 页描述符转页帧号
 #define pfn_valid(pfn)		((pfn) < max_mapnr)
 #endif /* !CONFIG_DISCONTIGMEM */
-#define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
+#define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT) // 虚拟地址转页描述符
 
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
 

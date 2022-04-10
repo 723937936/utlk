@@ -191,7 +191,7 @@ extern pgprot_t protection_map[16];
 /*
  * These are the virtual MM functions - opening of an area, closing and
  * unmapping it (needed to keep files on disk up-to-date etc), pointer
- * to the functions called when a no-page or a wp-page exception occurs. 
+ * to the functions called when a no-page or a wp-page exception occurs.
  */
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
@@ -220,9 +220,13 @@ typedef unsigned long page_flags_t;
  * moment. Note that we have no way to track which tasks are using
  * a page.
  */
+// 描述物理页帧的状态
+// 每个物理页帧都有一个页描述符
 struct page {
+	// 页帧的状态标志
 	page_flags_t flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
+	// 页帧使用计数，如果为-1，表示未分配
 	atomic_t _count;		/* Usage count, see below. */
 	atomic_t _mapcount;		/* Count of ptes mapped in mms,
 					 * to show when page is mapped
@@ -243,6 +247,7 @@ struct page {
 					 * see PAGE_MAPPING_ANON below.
 					 */
 	pgoff_t index;			/* Our offset within mapping. */
+	// 空闲块链接
 	struct list_head lru;		/* Pageout list, eg. active_list
 					 * protected by zone->lru_lock !
 					 */
@@ -385,7 +390,7 @@ static inline void put_page(struct page *page)
  * freelist managemet (when page_count()==0).
  *
  * There is also a per-mapping radix tree mapping index to the page
- * in memory if present. The tree is rooted at mapping->root.  
+ * in memory if present. The tree is rooted at mapping->root.
  *
  * All process pages can do I/O:
  * - inode pages may need to be read from disk,
@@ -634,7 +639,7 @@ extern unsigned long do_mremap(unsigned long addr,
 
 /*
  * Prototype to add a shrinker callback for ageable caches.
- * 
+ *
  * These functions are passed a count `nr_to_scan' and a gfpmask.  They should
  * scan `nr_to_scan' objects, attempting to free them.
  *
@@ -665,7 +670,7 @@ extern void remove_shrinker(struct shrinker *shrinker);
  * Remove it when 4level-fixup.h has been removed.
  */
 #ifdef CONFIG_MMU
-#ifndef __ARCH_HAS_4LEVEL_HACK 
+#ifndef __ARCH_HAS_4LEVEL_HACK
 static inline pud_t *pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 {
 	if (pgd_none(*pgd))
@@ -684,7 +689,7 @@ static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long a
 
 extern void free_area_init(unsigned long * zones_size);
 extern void free_area_init_node(int nid, pg_data_t *pgdat,
-	unsigned long * zones_size, unsigned long zone_start_pfn, 
+	unsigned long * zones_size, unsigned long zone_start_pfn,
 	unsigned long *zholes_size);
 extern void memmap_init_zone(unsigned long, int, unsigned long, unsigned long);
 extern void mem_init(void);
@@ -778,7 +783,7 @@ unsigned long  page_cache_readahead(struct address_space *mapping,
 			  struct file *filp,
 			  unsigned long offset,
 			  unsigned long size);
-void handle_ra_miss(struct address_space *mapping, 
+void handle_ra_miss(struct address_space *mapping,
 		    struct file_ra_state *ra, pgoff_t offset);
 unsigned long max_sane_readahead(unsigned long nr);
 

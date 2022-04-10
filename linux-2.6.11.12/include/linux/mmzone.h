@@ -21,8 +21,8 @@
 #endif
 
 struct free_area {
-	struct list_head	free_list;
-	unsigned long		nr_free;
+	struct list_head	free_list; // 空闲块的双向链表
+	unsigned long		nr_free; // 空闲块链表的长度
 };
 
 struct pglist_data;
@@ -83,6 +83,7 @@ struct per_cpu_pageset {
  * be 8 (2 ** 3) zonelists.  GFP_ZONETYPES defines the number of possible
  * combinations of zone modifiers in "zone modifier space".
  */
+// GFP_ZONEMASK用于获取gfp_mask的低2位
 #define GFP_ZONEMASK	0x03
 /*
  * As an optimisation any zone modifier bits which are only valid when
@@ -96,6 +97,10 @@ struct per_cpu_pageset {
  * use the second.
  */
 /* #define GFP_ZONETYPES	(GFP_ZONEMASK + 1) */		/* Non-loner */
+// 各种zone的组合种类，这里有3种，分别为：
+// [NORMAL, DMA]
+// [DMA]
+// [HIGHMEM, NORMAL, DMA]
 #define GFP_ZONETYPES	((GFP_ZONEMASK + 1) / 2 + 1)		/* Loner */
 
 /*
@@ -109,7 +114,7 @@ struct per_cpu_pageset {
 
 struct zone {
 	/* Fields commonly accessed by the page allocator */
-	unsigned long		free_pages;
+	unsigned long		free_pages; // zone里的空闲页帧数
 	unsigned long		pages_min, pages_low, pages_high;
 	/*
 	 * We don't know if the memory that we're going to allocate will be freeable
@@ -127,13 +132,13 @@ struct zone {
 	 * free areas of different sizes
 	 */
 	spinlock_t		lock;
-	struct free_area	free_area[MAX_ORDER];
+	struct free_area	free_area[MAX_ORDER]; // 共11个桶
 
 
 	ZONE_PADDING(_pad1_)
 
 	/* Fields commonly accessed by the page reclaim scanner */
-	spinlock_t		lru_lock;	
+	spinlock_t		lru_lock;
 	struct list_head	active_list;
 	struct list_head	inactive_list;
 	unsigned long		nr_scan_active;
@@ -198,11 +203,13 @@ struct zone {
 	 * Discontig memory support fields.
 	 */
 	struct pglist_data	*zone_pgdat;
-	struct page		*zone_mem_map;
+	struct page		*zone_mem_map; // zone的起始页描述符
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
-	unsigned long		zone_start_pfn;
+	unsigned long		zone_start_pfn; // zone里的第一个页帧的页帧号
 
+	// zone里页帧个数（包括空洞）
 	unsigned long		spanned_pages;	/* total size, including holes */
+	// zone里页帧个数（不包括空洞）
 	unsigned long		present_pages;	/* amount of memory (excluding holes) */
 
 	/*
@@ -231,6 +238,10 @@ struct zone {
  * footprint of this construct is very small.
  */
 struct zonelist {
+	// 最多3个zone，按优先级顺序排列
+	// 如果设置了__GFP_DMA，则zones只包含ZONE_DMA
+	// 如果设置了_GFP_HIGHMEM，则zones包含ZONE_HIGHMEM，ZONE_NORMAL和ZONE_DMA
+	// 其他情况zones包含ZONE_NORMAL和ZONE_DMA
 	struct zone *zones[MAX_NUMNODES * MAX_NR_ZONES + 1]; // NULL delimited
 };
 
@@ -247,18 +258,26 @@ struct zonelist {
  * per-zone basis.
  */
 struct bootmem_data;
+
+// NUMA node描述符
+// i386架构上只有一个node
 typedef struct pglist_data {
-	struct zone node_zones[MAX_NR_ZONES];
+	struct zone node_zones[MAX_NR_ZONES]; // 包含3个zone描述符，分别为DMA,NORMAL,HIGHMEM
+	// 各种zone的组合种类，这里有3种，分别为：
+	// [NORMAL, DMA]
+	// [DMA]
+	// [HIGHMEM, NORMAL, DMA]
+	// 由gfp_mask的低2位作为索引选择不同的组合
 	struct zonelist node_zonelists[GFP_ZONETYPES];
-	int nr_zones;
-	struct page *node_mem_map;
+	int nr_zones; // 3个
+	struct page *node_mem_map; // 因为只有一个node，所以这里就是mem_map
 	struct bootmem_data *bdata;
-	unsigned long node_start_pfn;
+	unsigned long node_start_pfn; // 实际上就是0
 	unsigned long node_present_pages; /* total number of physical pages */
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
-	int node_id;
-	struct pglist_data *pgdat_next;
+	int node_id; // 也是0
+	struct pglist_data *pgdat_next; // 指向下一个node
 	wait_queue_head_t kswapd_wait;
 	struct task_struct *kswapd;
 	int kswapd_max_order;
@@ -267,7 +286,7 @@ typedef struct pglist_data {
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
 #define node_spanned_pages(nid)	(NODE_DATA(nid)->node_spanned_pages)
 
-extern struct pglist_data *pgdat_list;
+extern struct pglist_data *pgdat_list; // NUMA node链表
 
 void __get_zone_counts(unsigned long *active, unsigned long *inactive,
 			unsigned long *free, struct pglist_data *pgdat);
@@ -344,7 +363,7 @@ static inline int is_normal_idx(int idx)
 	return (idx == ZONE_NORMAL);
 }
 /**
- * is_highmem - helper function to quickly check if a struct zone is a 
+ * is_highmem - helper function to quickly check if a struct zone is a
  *              highmem zone or not.  This is an attempt to keep references
  *              to ZONE_{DMA/NORMAL/HIGHMEM/etc} in general code to a minimum.
  * @zone - pointer to struct zone variable
@@ -362,7 +381,7 @@ static inline int is_normal(struct zone *zone)
 /* These two functions are used to setup the per zone pages min values */
 struct ctl_table;
 struct file;
-int min_free_kbytes_sysctl_handler(struct ctl_table *, int, struct file *, 
+int min_free_kbytes_sysctl_handler(struct ctl_table *, int, struct file *,
 					void __user *, size_t *, loff_t *);
 extern int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES-1];
 int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *, int, struct file *,
@@ -370,15 +389,15 @@ int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *, int, struct file *,
 
 #include <linux/topology.h>
 /* Returns the number of the current Node. */
-#define numa_node_id()		(cpu_to_node(_smp_processor_id()))
+#define numa_node_id()		(cpu_to_node(_smp_processor_id())) // 返回0
 
 #ifndef CONFIG_DISCONTIGMEM
 
-extern struct pglist_data contig_page_data;
-#define NODE_DATA(nid)		(&contig_page_data)
-#define NODE_MEM_MAP(nid)	mem_map
+extern struct pglist_data contig_page_data; // i386上只有一个NUMA node
+#define NODE_DATA(nid)		(&contig_page_data) // 返回这个全局node
+#define NODE_MEM_MAP(nid)	mem_map // 所有的物理内存都在这一个node里
 #define MAX_NODES_SHIFT		1
-#define pfn_to_nid(pfn)		(0)
+#define pfn_to_nid(pfn)		(0) // 只有一个node，返回0
 
 #else /* CONFIG_DISCONTIGMEM */
 

@@ -40,7 +40,7 @@
 /* MCD - HACK: Find somewhere to initialize this EARLY, or make this initializer cleaner */
 nodemask_t node_online_map = { { [0] = 1UL } };
 nodemask_t node_possible_map = NODE_MASK_ALL;
-struct pglist_data *pgdat_list;
+struct pglist_data *pgdat_list; // NUMA node链表
 unsigned long totalram_pages;
 unsigned long totalhigh_pages;
 long nr_swap_pages;
@@ -180,13 +180,13 @@ static inline unsigned long page_order(struct page *page) {
 }
 
 static inline void set_page_order(struct page *page, int order) {
-	page->private = order;
-	__SetPagePrivate(page);
+	page->private = order; // page->private保存以page开始的块的order
+	__SetPagePrivate(page); // 设置PG_private标志
 }
 
 static inline void rmv_page_order(struct page *page)
 {
-	__ClearPagePrivate(page);
+	__ClearPagePrivate(page); // 清除PG_private标志，即使page->private字段无意义
 	page->private = 0;
 }
 
@@ -201,10 +201,10 @@ static inline void rmv_page_order(struct page *page)
  */
 static inline int page_is_buddy(struct page *page, int order)
 {
-       if (PagePrivate(page)           &&
-           (page_order(page) == order) &&
-           !PageReserved(page)         &&
-            page_count(page) == 0)
+       if (PagePrivate(page)           && // page->private字段有意义
+           (page_order(page) == order) && // 块的首页的private字段保存块的order
+           !PageReserved(page)         && // page是动态内存
+            page_count(page) == 0) // _count == -1 表示该页帧没有被分配
                return 1;
        return 0;
 }
@@ -225,53 +225,69 @@ static inline int page_is_buddy(struct page *page, int order)
  * free pages of length of (1 << order) and marked with PG_Private.Page's
  * order is recorded in page->private field.
  * So when we are allocating or freeing one, we can derive the state of the
- * other.  That is, if we allocate a small block, and both were   
- * free, the remainder of the region must be split into blocks.   
+ * other.  That is, if we allocate a small block, and both were
+ * free, the remainder of the region must be split into blocks.
  * If a block is freed, and its buddy is also free, then this
- * triggers coalescing into a block of larger size.            
+ * triggers coalescing into a block of larger size.
  *
  * -- wli
  */
 
+// 参数说明：
+// page：要释放的块
+// base：zone的起始页
+// zone：操作的zone
+// order：要释放的块的大小(2^order页)，下面分析我们假设order为1
 static inline void __free_pages_bulk (struct page *page, struct page *base,
 		struct zone *zone, unsigned int order)
 {
 	unsigned long page_idx;
 	struct page *coalesced;
-	int order_size = 1 << order;
+	int order_size = 1 << order; // 假设order=1，则这个块包含2页
 
 	if (unlikely(order))
 		destroy_compound_page(page, order);
 
-	page_idx = page - base;
+	page_idx = page - base; // page在zone->zone_mem_map中的索引
 
 	BUG_ON(page_idx & (order_size - 1));
 	BUG_ON(bad_range(zone, page));
 
-	zone->free_pages += order_size;
+	zone->free_pages += order_size; // zone里的空闲页增加2页
 	while (order < MAX_ORDER-1) {
 		struct free_area *area;
 		struct page *buddy;
 		int buddy_idx;
 
+		// 计算page块的伙伴块的索引
+		// 我们假设zone里的zone_mem_map数组如下
+		// ---------------------------------
+		// | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+		// ---------------------------------
+		// 假设page_idx为4，也就是说我们要释放的块包含4,5两页
+		// 那么他的伙伴块的索引应该是6，即0b100 ^ 0b010 = 0b110
+		// 反过来，假设page_idx为6，也就是我们要释放的块包含6,7两页
+		// 那么他的伙伴块的索引应该是4，及0b110 ^ 0b010 = 0b100
 		buddy_idx = (page_idx ^ (1 << order));
-		buddy = base + buddy_idx;
+		buddy = base + buddy_idx; // buddy指向伙伴块的页描述符
 		if (bad_range(zone, buddy))
 			break;
-		if (!page_is_buddy(buddy, order))
+		if (!page_is_buddy(buddy, order)) // 如果对应的伙伴已经分配了则不再继续合并
 			break;
 		/* Move the buddy up one level. */
-		list_del(&buddy->lru);
-		area = zone->free_area + order;
-		area->nr_free--;
+		list_del(&buddy->lru); // 把这个伙伴从桶里删除
+		area = zone->free_area + order; // 取order对应的桶
+		area->nr_free--; // 空闲块减1
 		rmv_page_order(buddy);
-		page_idx &= buddy_idx;
-		order++;
+		page_idx &= buddy_idx; // 如果page_idx为6，则设为4; 0b110 & 0b100 == 0b100
+		order++; // order变成2，及释放从page_idx开始的4页块
 	}
+	// 假设上面的循环只循环了一次，找到了一个伙伴，此时page_idx为4，order为2
+	// 即要把4,5,6,7页组成的块插到order为2的桶里
 	coalesced = base + page_idx;
 	set_page_order(coalesced, order);
-	list_add(&coalesced->lru, &zone->free_area[order].free_list);
-	zone->free_area[order].nr_free++;
+	list_add(&coalesced->lru, &zone->free_area[order].free_list); // 添加到order为2的桶里
+	zone->free_area[order].nr_free++; // order为2的桶的空闲块加1
 }
 
 static inline void free_pages_check(const char *function, struct page *page)
@@ -294,7 +310,7 @@ static inline void free_pages_check(const char *function, struct page *page)
 }
 
 /*
- * Frees a list of pages. 
+ * Frees a list of pages.
  * Assumes all pages on list are in same zone, and of same order.
  * count is the number of pages to free, or 0 for all on the list.
  *
@@ -364,20 +380,31 @@ void __free_pages_ok(struct page *page, unsigned int order)
  *
  * -- wli
  */
+
+// [0] -> 1,1,1,1
+// [1] -> 2,2,2,2
+// [2] -> 4,4,4,4
+// [3] -> 8,8,8,8
+// [4] -> 16,16,16,16
 static inline struct page *
 expand(struct zone *zone, struct page *page,
  	int low, int high, struct free_area *area)
 {
-	unsigned long size = 1 << high;
+	// 下面我们假设low=3,high=4
+	// 也就是我们想请求的是8页块
+	// 但是我们找到了一个16页块
+	// 那么参数page是16页块的第一页
+	// area是16页块的桶
+	unsigned long size = 1 << high; // size=16页
 
 	while (high > low) {
-		area--;
-		high--;
-		size >>= 1;
+		area--; // 指向8页块的桶
+		high--; // 让high=3
+		size >>= 1; // 让size=8
 		BUG_ON(bad_range(zone, &page[size]));
-		list_add(&page[size].lru, &area->free_list);
-		area->nr_free++;
-		set_page_order(&page[size], high);
+		list_add(&page[size].lru, &area->free_list); // 把16页块切割成两个8页块，即把第二个8页块插到8页块的桶里
+		area->nr_free++; // 8页块的桶的块数加1
+		set_page_order(&page[size], high); // 在块的首页里记住order
 	}
 	return page;
 }
@@ -424,7 +451,7 @@ static void prep_new_page(struct page *page, int order)
 	kernel_map_pages(page, 1 << order, 1);
 }
 
-/* 
+/*
  * Do the hard work of removing an element from the buddy allocator.
  * Call me with the zone->lock already held.
  */
@@ -435,34 +462,34 @@ static struct page *__rmqueue(struct zone *zone, unsigned int order)
 	struct page *page;
 
 	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
-		area = zone->free_area + current_order;
-		if (list_empty(&area->free_list))
+		area = zone->free_area + current_order; // 取出对应current_order的桶
+		if (list_empty(&area->free_list)) // 如果这个桶为空，继续查找下一个桶
 			continue;
 
-		page = list_entry(area->free_list.next, struct page, lru);
-		list_del(&page->lru);
+		page = list_entry(area->free_list.next, struct page, lru); // 取出该桶的第一个空闲块
+		list_del(&page->lru); // 从对应桶里删除这个空闲块
 		rmv_page_order(page);
-		area->nr_free--;
-		zone->free_pages -= 1UL << order;
+		area->nr_free--; // 对应桶的空闲块个数减1
+		zone->free_pages -= 1UL << order; // zone的空闲页帧数减去2^order个页帧
 		return expand(zone, page, order, current_order, area);
 	}
 
 	return NULL;
 }
 
-/* 
+/*
  * Obtain a specified number of elements from the buddy allocator, all under
  * a single hold of the lock, for efficiency.  Add them to the supplied list.
  * Returns the number of new pages which were placed at *list.
  */
-static int rmqueue_bulk(struct zone *zone, unsigned int order, 
+static int rmqueue_bulk(struct zone *zone, unsigned int order,
 			unsigned long count, struct list_head *list)
 {
 	unsigned long flags;
 	int i;
 	int allocated = 0;
 	struct page *page;
-	
+
 	spin_lock_irqsave(&zone->lock, flags);
 	for (i = 0; i < count; ++i) {
 		page = __rmqueue(zone, order);
@@ -530,9 +557,9 @@ void drain_local_pages(void)
 {
 	unsigned long flags;
 
-	local_irq_save(flags);	
+	local_irq_save(flags);
 	__drain_pages(smp_processor_id());
-	local_irq_restore(flags);	
+	local_irq_restore(flags);
 }
 #endif /* CONFIG_PM */
 
@@ -593,7 +620,7 @@ void fastcall free_hot_page(struct page *page)
 {
 	free_hot_cold_page(page, 0);
 }
-	
+
 void fastcall free_cold_page(struct page *page)
 {
 	free_hot_cold_page(page, 1);
@@ -1582,7 +1609,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat,
 	pgdat->nr_zones = 0;
 	init_waitqueue_head(&pgdat->kswapd_wait);
 	pgdat->kswapd_max_order = 0;
-	
+
 	for (j = 0; j < MAX_NR_ZONES; j++) {
 		struct zone *zone = pgdat->node_zones + j;
 		unsigned long size, realsize;
@@ -1744,7 +1771,7 @@ static void frag_stop(struct seq_file *m, void *arg)
 {
 }
 
-/* 
+/*
  * This walks the free areas for each zone.
  */
 static int frag_show(struct seq_file *m, void *arg)
@@ -1940,8 +1967,8 @@ static void setup_per_zone_lowmem_reserve(void)
 }
 
 /*
- * setup_per_zone_pages_min - called when min_free_kbytes changes.  Ensures 
- *	that the pages_{min,low,high} values for each zone are set correctly 
+ * setup_per_zone_pages_min - called when min_free_kbytes changes.  Ensures
+ *	that the pages_{min,low,high} values for each zone are set correctly
  *	with respect to min_free_kbytes.
  */
 static void setup_per_zone_pages_min(void)
@@ -1975,10 +2002,10 @@ static void setup_per_zone_pages_min(void)
 				min_pages = 128;
 			zone->pages_min = min_pages;
 		} else {
-			/* if it's a lowmem zone, reserve a number of pages 
+			/* if it's a lowmem zone, reserve a number of pages
 			 * proportionate to the zone's size.
 			 */
-			zone->pages_min = (pages_min * zone->present_pages) / 
+			zone->pages_min = (pages_min * zone->present_pages) /
 			                   lowmem_pages;
 		}
 
@@ -2034,11 +2061,11 @@ static int __init init_per_zone_pages_min(void)
 module_init(init_per_zone_pages_min)
 
 /*
- * min_free_kbytes_sysctl_handler - just a wrapper around proc_dointvec() so 
+ * min_free_kbytes_sysctl_handler - just a wrapper around proc_dointvec() so
  *	that we can call two helper functions whenever min_free_kbytes
  *	changes.
  */
-int min_free_kbytes_sysctl_handler(ctl_table *table, int write, 
+int min_free_kbytes_sysctl_handler(ctl_table *table, int write,
 		struct file *file, void __user *buffer, size_t *length, loff_t *ppos)
 {
 	proc_dointvec(table, write, file, buffer, length, ppos);
